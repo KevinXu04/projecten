@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom"; 
 import ErrorAlert from "./ErrorAlert"; 
 import LoginButtons from "./LoginButtons";
-import Captcha from "../captcha/Captcha";
+import useRecaptchaV3 from "../captcha/Captcha"; 
+import { getFunctions, httpsCallable } from 'firebase/functions'; 
 import "./style/LoginPage.css";
 
 const LoginForm = () => {
@@ -16,9 +17,11 @@ const LoginForm = () => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [blockTime, setBlockTime] = useState(null);
   const [isBlocked, setIsBlocked] = useState(false);
-  const [loading, setLoading] = useState(false); // Added loading state
-  const [captchaToken, setCaptchaToken] = useState(""); // To store reCAPTCHA token
-  const navigate = useNavigate(); // To redirect users after a successful login.
+  const [loading, setLoading] = useState(false); 
+  const navigate = useNavigate(); 
+
+  // Initialize reCAPTCHA
+  const executeRecaptcha = useRecaptchaV3('6Lc_A2EqAAAAANr-GXLMhgjBdRYWKpZ1y-YwF7Mk', 'login');
 
   const handleChange = (e) => {
     setFormData({
@@ -31,66 +34,62 @@ const LoginForm = () => {
     setRememberMe(e.target.checked);
   };
 
-  // Handle Captcha verification
-  const handleVerifyCaptcha = (token) => {
-    setCaptchaToken(token);
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Check if the user is blocked
     if (isBlocked) {
-      const remainingTime = Math.ceil((blockTime - Date.now()) / 1000 / 60); // in minutes
+      const remainingTime = Math.ceil((blockTime - Date.now()) / 1000 / 60); 
       showAlert('Account Blocked', `Your account is temporarily blocked due to too many failed login attempts. Try again in ${remainingTime} minutes.`);
       return;
     }
 
-    if (!captchaToken) {
-      showAlert('Captcha Error', 'Please complete the captcha before submitting the form.');
-      return;
-    }
-
     try {
-      setLoading(true); // Show loading state
-      const response = await axios.post('http://localhost:3000/api/login', formData); // Send login data to the API
+      setLoading(true); 
+
+      // Get reCAPTCHA token
+      const recaptchaToken = await executeRecaptcha('login');
+
+      // Combine form data and reCAPTCHA token
+      const data = {
+        ...formData,
+        token: recaptchaToken,
+      };
+
+      const response = await axios.post('http://localhost:3000/api/login', data);
       const { token } = response.data;
 
-      // Save the token in localStorage or sessionStorage
       if (rememberMe) {
         localStorage.setItem('authToken', token);
       } else {
         sessionStorage.setItem('authToken', token);
       }
 
-      setLoginAttempts(0); // Reset failed attempts
-      showAlert('Login Successful', 'Redirecting to your dashboard...');
+      setLoginAttempts(0); 
+      showAlert('Login Successful', 'Redirecting...');
 
       setTimeout(() => {
-        navigate('/dashboard'); // Redirect to the dashboard after successful login
-      }, 1000); // Short delay to show feedback
+        navigate('/home'); 
+      }, 1000);
 
     } catch (error) {
       handleError(error);
     } finally {
-      setLoading(false); // Stop loading state
+      setLoading(false); 
     }
   };
 
-  // Handle cancel button click (navigates back to welcome page)
+
   const handleCancel = () => {
-    navigate('/'); // Redirect to welcome page (or another page)
+    navigate('/'); // Redirect to the welcome page
   };
 
-  // Error handling function
   const handleError = (error) => {
     if (error.response) {
       if (error.response.status === 401) {
         setLoginAttempts(prev => prev + 1);
-        
-        // Block the account after 5 failed attempts
+
         if (loginAttempts + 1 >= 5) {
-          setBlockTime(Date.now() + 15 * 60 * 1000); // Block for 15 minutes
+          setBlockTime(Date.now() + 15 * 60 * 1000); 
           setIsBlocked(true);
           showAlert('Blocked', 'Too many failed attempts. Please try again in 15 minutes.');
         } else {
@@ -123,8 +122,8 @@ const LoginForm = () => {
     if (isBlocked && blockTime) {
       const timer = setInterval(() => {
         if (Date.now() >= blockTime) {
-          setIsBlocked(false); // Unblock the user after the timeout
-          setLoginAttempts(0); // Reset attempts
+          setIsBlocked(false); 
+          setLoginAttempts(0); 
           clearInterval(timer);
         }
       }, 1000);
@@ -135,6 +134,7 @@ const LoginForm = () => {
 
   return (
     <div className="login-container">
+          <div className="login-container">
       <div className="login-left-panel">
         <h1>Log in to your account</h1>
         <form onSubmit={handleSubmit} className="login-form">
@@ -171,9 +171,6 @@ const LoginForm = () => {
             </div>
             <a href="/password_reset" className="forgot-password-link">Forgot password?</a>
           </div>
-
-          {/* Add the Captcha component */}
-          <Captcha onVerifyCaptcha={handleVerifyCaptcha} />
           
           <div className="button">
             <LoginButtons onClick={handleSubmit} />
@@ -221,6 +218,7 @@ const LoginForm = () => {
           your energy management.
         </p>
       </div>
+    </div>
     </div>
   );
 };

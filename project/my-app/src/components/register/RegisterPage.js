@@ -1,22 +1,29 @@
 import React, { useState } from "react";
-import axios from "axios"; // Ensure axios is imported
-import { useNavigate } from "react-router-dom"; // Import useNavigate for navigation
-import "./Style/RegisterForm.css"; // Import your styles
+import axios from "axios"; 
+import { useNavigate } from "react-router-dom"; 
+import useRecaptchaV3 from "../captcha/Captcha"; 
+import { getFunctions, httpsCallable } from 'firebase/functions'; 
+import "./style/RegisterForm.css"; 
 
 const RegisterForm = () => {
-  const navigate = useNavigate(); // Initialize useNavigate
-  const [formData, setFormData] = useState({
+  const navigate = useNavigate(); 
+  const initialFormData = {
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
     phoneNumber: "",
     location: "",
-  });
+  };
 
-  const [isSubmitted, setIsSubmitted] = useState(false); // State to track successful registration
-  const [loading, setLoading] = useState(false); // For showing a loading indicator
-  const [error, setError] = useState(null); // State for error messages
+  const [formData, setFormData] = useState(initialFormData);
+
+  const [isSubmitted, setIsSubmitted] = useState(false); 
+  const [loading, setLoading] = useState(false); 
+  const [error, setError] = useState(null); 
+
+  // Initialize reCAPTCHA
+  const executeRecaptcha = useRecaptchaV3('6Lc_A2EqAAAAANr-GXLMhgjBdRYWKpZ1y-YwF7Mk', 'register');
 
   const handleChange = (e) => {
     setFormData({
@@ -27,42 +34,43 @@ const RegisterForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true); // Start loading state
-    setError(null); // Reset error message
+    setLoading(true); 
+    setError(null); 
 
     // Validate that the passwords match
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match");
-      setLoading(false); // Stop loading
-      return; // Exit the function
+      setLoading(false);
+      return;
     }
 
     try {
-      // Send the actual form data to the API
-      await axios.post('http://localhost:3000/api/register', {
-        email: formData.email,
-        name: formData.name,
-        password: formData.password,
-        phoneNumber: formData.phoneNumber,
-        location: formData.location,
-      });
+      // Execute reCAPTCHA to get the token
+      const recaptchaToken = await executeRecaptcha('register');
+
+      // Combine form data and reCAPTCHA token
+      const data = {
+        ...formData,
+        token: recaptchaToken
+      };
+
+      // Send the form data to the API
+      await axios.post('http://localhost:3000/api/register', data);
 
       alert('User registered successfully');
-      setIsSubmitted(true); // Mark form as successfully submitted
+      setIsSubmitted(true); 
     } catch (error) {
       console.log("Error registering:", error);
-      setError("Error registering user. Please try again."); // Set error message for user feedback
+      setError("Error registering user. Please try again.");
     } finally {
-      setLoading(false); // Stop loading
+      setLoading(false); 
     }
   };
 
-  // Handle cancel button click (navigates back to welcome page)
   const handleCancel = () => {
-    navigate('/'); // Redirect to welcome page (or another page)
+    setFormData(initialFormData);
   };
 
-  // If form is submitted successfully, show confirmation message
   if (isSubmitted) {
     return (
       <div className="confirmation-container">
@@ -79,8 +87,7 @@ const RegisterForm = () => {
       <div className="register-left-panel">
         <h1>Create your account!</h1>
         <p>
-          Register to access your personal dashboard and real-time monitoring of
-          your solar yield and battery status.
+          Register to access your personal dashboard and real-time monitoring of your solar yield and battery status.
         </p>
         <p>Fill in the details to start optimizing your energy management.</p>
       </div>
@@ -151,21 +158,16 @@ const RegisterForm = () => {
           <button type="submit" className="register-submit-button" disabled={loading}>
             {loading ? "Registering..." : "Sign up"}
           </button>
-          
-          {/* Add the cancel button here */}
           <button type="button" className="cancel-button" onClick={handleCancel}>Cancel</button>
 
-          {/* Display error message if there's one */}
           {error && <p className="error-message" style={{ color: "red" }}>{error}</p>}
         </form>
         <p className="register-login-prompt">
           Have an account? <a href="/login">Log in here!</a>
         </p>
-
         <div className="register-or-divider">
           <span>OR</span>
         </div>
-
         <div className="register-social-login">
           <button className="register-social-button facebook">f</button>
           <button className="register-social-button google">G</button>
